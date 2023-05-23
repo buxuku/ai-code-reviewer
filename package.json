@@ -1,6 +1,6 @@
 {
   "name": "@buxuku/ai-code-reviewer",
-  "version": "1.0.0",
+  "version": "1.2.1",
   "main": "index.js",
   "bin": {
     "ai-code-reviewer": "./bin/index.js"
@@ -14,6 +14,10 @@
     "bin"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/buxuku/ai-code-reviewer"
+  },
   "dependencies": {
     "@types/axios": "^0.14.0",
     "@types/commander": "^2.12.2",
@@ -21,5 +25,9 @@
     "axios": "^1.4.0",
     "commander": "^10.0.1",
     "typescript": "^5.0.4"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

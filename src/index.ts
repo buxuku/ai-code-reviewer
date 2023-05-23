@@ -1,46 +1,69 @@
-import { GitLab } from './gitlab';
-import { OpenAI } from './openai';
-import { Command } from 'commander';
+import {Command} from 'commander';
+import {GitLab} from './gitlab';
+import {OpenAI} from './openai';
+import {delay, getDiffBlocks, getLineObj} from "./utils";
 
 const program = new Command();
 
 program
-    .option('-g, --gitlab-api-url <url>', 'GitLab API URL')
-    .option('-t, --gitlab-access-token <token>', 'GitLab Access Token')
-    .option('-o, --openai-api-url <url>', 'OpenAI API URL')
-    .option('-a, --openai-access-token <token>', 'OpenAI Access Token')
-    .option('-p, --project-id <id>', 'GitLab Project ID')
-    .option('-m, --merge-request-id <id>', 'GitLab Merge Request ID')
+    .option('-g, --gitlab-api-url <string>', 'GitLab API URL', ' https://gitlab.com/api/v4')
+    .option('-t, --gitlab-access-token <string>', 'GitLab Access Token')
+    .option('-o, --openai-api-url <string>', 'OpenAI API URL', 'https://api.openai.com')
+    .option('-a, --openai-access-token <string>', 'OpenAI Access Token')
+    .option('-p, --project-id <number>', 'GitLab Project ID')
+    .option('-m, --merge-request-id <string>', 'GitLab Merge Request ID')
+    .option('-org, --organization-id <number>', 'organization ID')
     .parse(process.argv);
 
 async function run() {
-    const gitlabApiUrl = program.opts().gitlabApiUrl;
-    const gitlabAccessToken = program.opts().gitlabAccessToken;
-    const openaiApiUrl = program.opts().openaiApiUrl;
-    const openaiAccessToken = program.opts().openaiAccessToken;
-    const projectId = program.opts().projectId;
-    const mrId = program.opts().mergeRequestId;
-    console.log(program.opts(), 'opts');
-    const gitlab = new GitLab({gitlabApiUrl, gitlabAccessToken, projectId, mrId});
-    const openai = new OpenAI(openaiApiUrl, openaiAccessToken);
-    const {changes, diff_refs} = await gitlab.getMergeRequestChanges();
-    console.log(changes, 'changes');
-    const results = [];
+    const {
+        gitlabApiUrl,
+        gitlabAccessToken,
+        openaiApiUrl,
+        openaiAccessToken,
+        projectId,
+        mergeRequestId,
+        organizationId
+    } = program.opts();
+    console.log('ai code review is underway...')
+    const gitlab = new GitLab({gitlabApiUrl, gitlabAccessToken, projectId, mergeRequestId});
+    const openai = new OpenAI(openaiApiUrl, openaiAccessToken, organizationId);
+    await gitlab.init().catch(() => {
+        console.log('gitlab init error')
+    });
+    const changes = await gitlab.getMergeRequestChanges().catch(() => {
+        console.log('get merge request changes error')
+    });
     for (const change of changes) {
-        if (change.renamed_file || change.deleted_file) {
+        if (change.renamed_file || change.deleted_file || !change?.diff?.startsWith('@@')) {
             continue;
         }
-        if(!/\.((j|t)sx?|css|less|scss)$/.test(change.new_path)) {
-            continue;
+        const diffBlocks = getDiffBlocks(change?.diff);
+        while (!!diffBlocks.length) {
+            const item = diffBlocks.shift()!;
+            const lineRegex = /@@\s-(\d+)(?:,(\d+))?\s\+(\d+)(?:,(\d+))?\s@@/;
+            const matches = lineRegex.exec(item);
+            if (matches) {
+                const lineObj = getLineObj(matches, item);
+                if ((lineObj?.new_line && lineObj?.new_line > 0) || (lineObj.old_line && lineObj.old_line > 0)) {
+                    try {
+                        const suggestion = await openai.reviewCodeChange(item);
+                        if (!suggestion.includes('666')) {
+                            await gitlab.addReviewComment(lineObj, change, suggestion);
+                        }
+                    } catch (e: any) {
+                        if (e?.response?.status === 429) {
+                            console.log('Too Many Requests, try again');
+                            await delay(60 * 1000);
+                            diffBlocks.push(item);
+                        }
+                    }
+                }
+            }
         }
-        const suggestion = await openai.reviewCodeChange(change.diff);
-        const result = await gitlab.addReviewComment(  change, suggestion, diff_refs);
-        results.push(result);
     }
-    console.log(results);
+    console.log('done');
 }
 
-run().catch(error => {
-    console.error(error);
-    process.exit(1);
-});
+module.exports = run;
+
