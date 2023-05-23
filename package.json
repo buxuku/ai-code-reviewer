@@ -1,0 +1,25 @@
+{
+  "name": "@buxuku/ai-code-reviewer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "bin": {
+    "ai-code-reviewer": "./bin/index.js"
+  },
+  "scripts": {
+    "start": "tsc --watch",
+    "build": "tsc"
+  },
+  "files": [
+    "lib",
+    "bin"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@types/axios": "^0.14.0",
+    "@types/commander": "^2.12.2",
+    "@types/node": "^20.2.1",
+    "axios": "^1.4.0",
+    "commander": "^10.0.1",
+    "typescript": "^5.0.4"
+  }
+}
